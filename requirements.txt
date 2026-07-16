@@ -1,0 +1,8 @@
+# The core harness has ZERO required third-party dependencies. It runs fully
+# offline (deterministic hashing embeddings + a mock LLM) using only the Python
+# standard library, so tests and demos work anywhere without an API key.
+#
+# Optional extras (see pyproject.toml for the canonical definitions):
+#
+#   pip install anthropic>=0.40   # enable real Claude model calls
+#   pip install pytest>=7.0       # run the test suite

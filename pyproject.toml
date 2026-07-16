@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rag-harness"
+version = "0.1.0"
+description = "End-to-end RAG system with a vector DB, an evaluation harness, and complexity-based model routing for token optimisation."
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT" }
+authors = [{ name = "Abhishek Mittal" }]
+keywords = ["rag", "vector-database", "evaluation", "llm", "claude", "anthropic", "token-optimization"]
+# The core package has no required runtime dependencies.
+dependencies = []
+
+[project.optional-dependencies]
+api = ["anthropic>=0.40"]
+dev = ["pytest>=7.0"]
+
+[project.scripts]
+rag-harness = "rag_harness.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["rag_harness*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
