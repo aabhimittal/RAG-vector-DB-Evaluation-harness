@@ -37,6 +37,7 @@ Model routing (token optimisation):
 ## Table of contents
 
 - [Why this exists](#why-this-exists)
+- [Production-hardening features (v0.2)](#production-hardening-features-v02)
 - [Quick start](#quick-start)
 - [Step-by-step: how the pipeline works](#step-by-step-how-the-pipeline-works)
   - [1. Configuration](#1-configuration)
@@ -70,6 +71,37 @@ things that matter in production:
   real traffic is easy. This project scores each query's complexity and routes
   it to the cheapest Claude tier that can handle it, then **measures the exact
   savings** against an always-premium baseline (≈59% on the sample set above).
+
+---
+
+## Production-hardening features (v0.2)
+
+Four features that take the pipeline from "demo" to "deployable", all offline,
+deterministic, and measured by the eval harness:
+
+| Feature | Module | What it does | Why it matters |
+| --- | --- | --- | --- |
+| **Hybrid retrieval** | [`retrieval.py`](rag_harness/retrieval.py) | BM25 (sparse) + dense vectors fused with **Reciprocal Rank Fusion**, with optional **MMR** diversity re-ranking | Dense search misses exact terms (acronyms, codes, SKUs); BM25 catches them. Fusing both lifts recall — MRR went **0.94 → 1.00** on the sample set. |
+| **Confidence-gated abstention** | [`pipeline.py`](rag_harness/pipeline.py) | When retrieval confidence is below a threshold, the pipeline answers "I don't know" **without calling the LLM** | Prevents confident hallucination on out-of-domain questions *and* saves the entire generation cost. |
+| **Semantic answer cache** | [`cache.py`](rag_harness/cache.py) | Keys on the query *embedding*, so paraphrases hit the cache and return at **zero LLM cost** | Recurring/near-duplicate questions cost nothing — complements routing (cheaper calls) by removing calls entirely. |
+| **Prompt-injection defence** | [`security.py`](rag_harness/security.py) | Neutralises adversarial instructions ("ignore previous instructions…") embedded in retrieved passages before they reach the model | Retrieved context is untrusted input — this is the RAG analogue of SQL injection. |
+
+```python
+from rag_harness import RAGPipeline, Settings
+
+pipe = RAGPipeline(Settings(
+    retrieval_mode="hybrid",       # dense | sparse | hybrid
+    use_mmr=True,                  # diversity re-ranking
+    enable_abstention=True,        # skip the LLM when retrieval is weak
+    enable_semantic_cache=True,    # free repeat answers
+    sanitize_context=True,         # injection defence (on by default)
+))
+```
+
+Every `RAGResult` now reports `confidence`, `abstained`, `cache_hit`,
+`retrieval_mode`, and `injection_flags`, and the eval report adds a
+**Reliability & security** block. See [`examples/advanced.py`](examples/advanced.py)
+for a runnable tour.
 
 ---
 
@@ -311,6 +343,9 @@ rag_harness/
   chunking.py       # sentence-aware overlapping splitter
   embeddings.py     # EmbeddingProvider protocol + offline HashingEmbedder
   vector_store.py   # cosine-similarity store + JSON persistence
+  retrieval.py      # BM25 + RRF fusion + MMR + HybridRetriever   (v0.2)
+  cache.py          # semantic answer cache                       (v0.2)
+  security.py       # prompt-injection defence                    (v0.2)
   complexity.py     # transparent query-complexity scorer
   router.py         # complexity → model tier + cost estimation
   llm.py            # Claude client (api) + deterministic mock
@@ -319,10 +354,10 @@ rag_harness/
   eval/
     metrics.py      # hit-rate, recall@k, MRR, F1, EM, keyword coverage
     dataset.py      # JSONL corpus / eval-set loaders
-    harness.py      # runner + aggregated report
+    harness.py      # runner + aggregated report (incl. reliability block)
 data/               # sample corpus + eval set
-examples/           # quickstart.py
-tests/              # 31 unit/integration tests (offline)
+examples/           # quickstart.py, advanced.py
+tests/              # 73 unit/integration/edge-case tests (offline)
 docs/ARCHITECTURE.md
 ```
 
@@ -338,9 +373,12 @@ pip install pytest
 python -m pytest
 ```
 
-The suite is fully offline and deterministic (31 tests covering chunking,
-embeddings, the vector store, complexity, routing, metrics, the pipeline, and the
-eval harness).
+The suite is fully offline and deterministic (73 tests covering chunking,
+embeddings, the vector store, hybrid retrieval, the semantic cache, injection
+defence, complexity, routing, metrics, the pipeline, the eval harness, and a
+dedicated **industrial edge-case** suite — empty/huge/unicode inputs, degenerate
+vectors, duplicates, injection payloads, malformed data files, tie-break
+determinism, and concurrent reads).
 
 ---
 

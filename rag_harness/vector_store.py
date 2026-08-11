@@ -75,6 +75,17 @@ class VectorStore:
                 self._vectors.append(vec)
                 self._chunks.append(chunk)
 
+    def all_chunks(self) -> List[Chunk]:
+        """Return every stored chunk (used to rebuild auxiliary indexes)."""
+        return list(self._chunks)
+
+    def get_vector(self, chunk_id: str) -> Optional[List[float]]:
+        """Return the stored (normalised) vector for a chunk id, or ``None``."""
+        pos = self._index.get(chunk_id)
+        if pos is None:
+            return None
+        return list(self._vectors[pos])
+
     # -- Query -----------------------------------------------------------
     def search(
         self,

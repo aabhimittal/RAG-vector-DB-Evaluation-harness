@@ -33,6 +33,9 @@ This document explains how the pieces fit together and why each exists.
 | `chunking.py` | Sentence-aware, overlapping document splitter. |
 | `embeddings.py` | `EmbeddingProvider` protocol + offline `HashingEmbedder`. |
 | `vector_store.py` | In-memory cosine-similarity store with JSON persistence. |
+| `retrieval.py` | BM25 sparse index, RRF fusion, MMR re-ranking, `HybridRetriever`. |
+| `cache.py` | Semantic answer cache (`SemanticCache`) keyed on query embeddings. |
+| `security.py` | Prompt-injection detection/neutralisation for retrieved context. |
 | `complexity.py` | Transparent, weighted query-complexity scorer. |
 | `router.py` | Maps complexity → model tier; per-model cost estimation. |
 | `llm.py` | Claude API client with a deterministic offline mock backend. |
@@ -63,6 +66,42 @@ own eval set.
 **The optimisation win is measured, not assumed.** Every query records the cost
 actually spent *and* the cost the premium model would have incurred, so the
 harness can report exact savings (see the `cost` block in the eval report).
+
+## Production-hardening layers (v0.2)
+
+The `query` path is wrapped with four independent, individually-toggleable
+layers, ordered so the cheapest exit wins:
+
+```
+query ─► semantic cache ─► route ─► hybrid retrieve ─► abstain? ─► sanitise ─► generate
+          (free hit)                (dense+sparse)     (no LLM)    (injection)
+```
+
+* **Hybrid retrieval** (`retrieval.py`). Dense and sparse (BM25) rankings are
+  fused with Reciprocal Rank Fusion — chosen over score-normalisation because it
+  depends only on rank order, so the two retrievers' incompatible score scales
+  never need reconciling. MMR re-ranking is an optional diversity pass. A dense
+  *confidence* signal (top cosine) is always computed, even in sparse mode, so
+  the abstention gate has a consistent input.
+
+* **Abstention** (`pipeline.py`). A confidence below `abstain_threshold` short-
+  circuits to a fixed "insufficient evidence" answer with **no LLM call** — the
+  reliability win (no hallucination) and a cost win (no tokens) in one gate.
+
+* **Semantic cache** (`cache.py`). Keyed on the query embedding so paraphrases
+  hit. A hit returns the stored result at zero cost. It sits *before* routing and
+  retrieval so a hit skips the entire pipeline.
+
+* **Injection defence** (`security.py`). Retrieved passages are untrusted; the
+  sanitiser neutralises recognised override/exfiltration phrasings and defangs
+  fake role turns *before* the context reaches the model, complementing the
+  system prompt's "context is data" instruction. Neutralisation is conservative
+  (defang, don't delete) so the retrieval signal survives.
+
+Each layer defaults to a backward-compatible setting (dense-equivalent hybrid,
+abstention on with a low threshold, cache off, sanitise on as a no-op for clean
+text), and every effect is surfaced on `RAGResult` and aggregated by the eval
+harness.
 
 ## Extending the system
 
