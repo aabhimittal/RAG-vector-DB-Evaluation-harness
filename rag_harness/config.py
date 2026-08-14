@@ -59,6 +59,28 @@ class Settings:
 
     # --- Retrieval ------------------------------------------------------
     top_k: int = 4  # chunks retrieved per query
+    # Retrieval strategy: "dense" (vectors), "sparse" (BM25), or "hybrid"
+    # (both, fused with Reciprocal Rank Fusion). Hybrid is the robust default.
+    retrieval_mode: str = "hybrid"
+    candidate_multiplier: int = 4  # over-retrieve this many x top_k before fusion
+    rrf_k: int = 60  # RRF constant; larger flattens the rank weighting
+    use_mmr: bool = False  # diversity re-ranking (Maximal Marginal Relevance)
+    mmr_lambda: float = 0.5  # 1.0 = pure relevance, 0.0 = pure diversity
+
+    # --- Reliability: confidence-gated abstention -----------------------
+    # When retrieval confidence (top dense cosine similarity) falls below the
+    # threshold, the pipeline abstains WITHOUT calling the LLM — avoiding a
+    # confident hallucination and saving the whole generation cost.
+    enable_abstention: bool = True
+    abstain_threshold: float = 0.10
+
+    # --- Semantic answer cache (cost optimisation) ----------------------
+    enable_semantic_cache: bool = False
+    cache_similarity_threshold: float = 0.92
+    cache_max_size: int = 1024
+
+    # --- Security: prompt-injection defence -----------------------------
+    sanitize_context: bool = True
 
     # --- Model routing (token optimisation) -----------------------------
     # When enabled, query complexity selects the cheapest model that can
@@ -102,6 +124,17 @@ class Settings:
             chunk_size=_env_int("RAG_CHUNK_SIZE", 500),
             chunk_overlap=_env_int("RAG_CHUNK_OVERLAP", 80),
             top_k=_env_int("RAG_TOP_K", 4),
+            retrieval_mode=os.environ.get("RAG_RETRIEVAL_MODE", "hybrid"),
+            candidate_multiplier=_env_int("RAG_CANDIDATE_MULTIPLIER", 4),
+            rrf_k=_env_int("RAG_RRF_K", 60),
+            use_mmr=_env_bool("RAG_USE_MMR", False),
+            mmr_lambda=_env_float("RAG_MMR_LAMBDA", 0.5),
+            enable_abstention=_env_bool("RAG_ENABLE_ABSTENTION", True),
+            abstain_threshold=_env_float("RAG_ABSTAIN_THRESHOLD", 0.10),
+            enable_semantic_cache=_env_bool("RAG_ENABLE_CACHE", False),
+            cache_similarity_threshold=_env_float("RAG_CACHE_THRESHOLD", 0.92),
+            cache_max_size=_env_int("RAG_CACHE_MAX_SIZE", 1024),
+            sanitize_context=_env_bool("RAG_SANITIZE_CONTEXT", True),
             enable_model_routing=_env_bool("RAG_ENABLE_ROUTING", True),
             simple_threshold=_env_float("RAG_SIMPLE_THRESHOLD", 0.33),
             moderate_threshold=_env_float("RAG_MODERATE_THRESHOLD", 0.66),

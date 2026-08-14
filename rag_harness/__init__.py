@@ -14,16 +14,25 @@ or an API key, while transparently upgrading to real Claude models when
 ``ANTHROPIC_API_KEY`` is available.
 """
 
+from rag_harness.cache import SemanticCache
 from rag_harness.chunking import Chunk, chunk_document
 from rag_harness.complexity import Complexity, ComplexityScorer
 from rag_harness.config import Settings
 from rag_harness.embeddings import EmbeddingProvider, HashingEmbedder, get_embedder
 from rag_harness.llm import LLMClient, LLMResponse
 from rag_harness.pipeline import RAGPipeline, RAGResult
+from rag_harness.retrieval import (
+    BM25Index,
+    HybridRetriever,
+    RetrievalResult,
+    mmr_rerank,
+    reciprocal_rank_fusion,
+)
 from rag_harness.router import ModelRouter, ModelTier, RoutingDecision
+from rag_harness.security import InjectionReport, sanitize_contexts
 from rag_harness.vector_store import SearchHit, VectorStore
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = [
     "Chunk",
@@ -43,5 +52,15 @@ __all__ = [
     "RoutingDecision",
     "SearchHit",
     "VectorStore",
+    # Hybrid retrieval
+    "BM25Index",
+    "HybridRetriever",
+    "RetrievalResult",
+    "reciprocal_rank_fusion",
+    "mmr_rerank",
+    # Cost / reliability / security
+    "SemanticCache",
+    "InjectionReport",
+    "sanitize_contexts",
     "__version__",
 ]

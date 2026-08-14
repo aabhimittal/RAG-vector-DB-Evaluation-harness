@@ -28,8 +28,14 @@ jobs:
       - name: Run tests (offline / deterministic)
         run: python -m pytest -q
 
-      - name: Smoke-test the CLI
+      - name: Smoke-test the CLI (hybrid retrieval + reliability report)
         run: |
           python -m rag_harness.cli eval \
             --corpus data/corpus.jsonl \
-            --eval data/eval_set.jsonl
+            --eval data/eval_set.jsonl \
+            --retrieval-mode hybrid
+
+      - name: Smoke-test the examples
+        run: |
+          python examples/quickstart.py
+          python examples/advanced.py

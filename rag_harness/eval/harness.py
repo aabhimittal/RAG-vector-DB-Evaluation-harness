@@ -38,6 +38,7 @@ class EvalReport:
     generation: Dict[str, float]
     routing: Dict[str, object]
     cost: Dict[str, float]
+    reliability: Dict[str, float] = field(default_factory=dict)
     per_example: List[Dict] = field(default_factory=list)
 
     def to_dict(self) -> Dict:
@@ -47,6 +48,7 @@ class EvalReport:
             "generation": self.generation,
             "routing": self.routing,
             "cost": self.cost,
+            "reliability": self.reliability,
             "per_example": self.per_example,
         }
 
@@ -66,12 +68,22 @@ class EvalReport:
             f"  keyword_cov: {self.generation['keyword_coverage']:.3f}",
             "",
             "Model routing (token optimisation):",
+            f"  retrieval mode  : {self.routing.get('retrieval_mode', 'dense')}",
             f"  tier counts: {self.routing['tier_counts']}",
             f"  cost spent      : ${self.cost['total_cost_usd']:.6f}",
             f"  premium baseline: ${self.cost['baseline_cost_usd']:.6f}",
             f"  cost saved      : ${self.cost['cost_saved_usd']:.6f} "
             f"({self.cost['savings_pct']:.1f}%)",
         ]
+        if self.reliability:
+            lines += [
+                "",
+                "Reliability & security:",
+                f"  mean confidence : {self.reliability['mean_confidence']:.3f}",
+                f"  abstain rate    : {self.reliability['abstain_rate']:.3f}",
+                f"  cache hit rate  : {self.reliability['cache_hit_rate']:.3f}",
+                f"  injection flags : {self.reliability['injection_flags']}",
+            ]
         return "\n".join(lines)
 
 
@@ -98,10 +110,18 @@ class EvalHarness:
         tier_counts: Dict[str, int] = {}
         total_cost = 0.0
         baseline_cost = 0.0
+        abstained = 0
+        cache_hits = 0
+        injection_flags = 0
+        confidence_sum = 0.0
         per_example: List[Dict] = []
 
         for ex in examples:
             result = self.pipeline.query(ex.question)
+            abstained += 1 if result.abstained else 0
+            cache_hits += 1 if result.cache_hit else 0
+            injection_flags += result.injection_flags
+            confidence_sum += result.confidence
 
             # Retrieval metrics (only meaningful if labels present).
             retrieved = result.retrieved_doc_ids
@@ -157,6 +177,14 @@ class EvalHarness:
         routing = {
             "tier_counts": tier_counts,
             "routing_enabled": self.pipeline.settings.enable_model_routing,
+            "retrieval_mode": self.pipeline.settings.retrieval_mode,
+        }
+
+        reliability = {
+            "mean_confidence": confidence_sum / n,
+            "abstain_rate": abstained / n,
+            "cache_hit_rate": cache_hits / n,
+            "injection_flags": injection_flags,
         }
 
         return EvalReport(
@@ -165,5 +193,6 @@ class EvalHarness:
             generation=generation,
             routing=routing,
             cost=cost,
+            reliability=reliability,
             per_example=per_example,
         )

@@ -37,6 +37,16 @@ def _build_settings(args: argparse.Namespace) -> Settings:
         settings.llm_mode = "mock"
     if getattr(args, "top_k", None):
         settings.top_k = args.top_k
+    if getattr(args, "retrieval_mode", None):
+        settings.retrieval_mode = args.retrieval_mode
+    if getattr(args, "mmr", False):
+        settings.use_mmr = True
+    if getattr(args, "cache", False):
+        settings.enable_semantic_cache = True
+    if getattr(args, "no_abstain", False):
+        settings.enable_abstention = False
+    if getattr(args, "no_sanitize", False):
+        settings.sanitize_context = False
     return settings
 
 
@@ -68,17 +78,24 @@ def cmd_query(args: argparse.Namespace) -> int:
         print(f"Q: {result.question}")
         print(f"A: {result.answer}")
         print()
-        print(f"routing : {result.routing.reason}")
-        print(f"model   : {result.llm.model}  (mode={result.llm.mode})")
+        print(f"routing   : {result.routing.reason}")
+        print(f"model     : {result.llm.model}  (mode={result.llm.mode})")
         print(
-            f"tokens  : in={result.llm.input_tokens} out={result.llm.output_tokens}"
+            f"retrieval : mode={result.retrieval_mode} "
+            f"confidence={result.confidence:.3f} "
+            f"abstained={result.abstained} cache_hit={result.cache_hit}"
+        )
+        if result.injection_flags:
+            print(f"security  : neutralised {result.injection_flags} injection pattern(s)")
+        print(
+            f"tokens    : in={result.llm.input_tokens} out={result.llm.output_tokens}"
         )
         print(
-            f"cost    : ${result.cost_usd:.6f} "
+            f"cost      : ${result.cost_usd:.6f} "
             f"(baseline ${result.baseline_cost_usd:.6f}, "
             f"saved ${result.cost_saved_usd:.6f})"
         )
-        print("sources :")
+        print("sources   :")
         for hit in result.hits:
             print(f"  - {hit.chunk.id} (score={hit.score:.3f})")
     return 0
@@ -115,6 +132,16 @@ def build_parser() -> argparse.ArgumentParser:
     common.add_argument("--no-routing", action="store_true", help="disable model routing")
     common.add_argument("--mock", action="store_true", help="force offline mock LLM")
     common.add_argument("--top-k", type=int, default=None, help="chunks to retrieve")
+    common.add_argument(
+        "--retrieval-mode",
+        choices=["dense", "sparse", "hybrid"],
+        default=None,
+        help="retrieval strategy (default: hybrid)",
+    )
+    common.add_argument("--mmr", action="store_true", help="enable MMR diversity re-ranking")
+    common.add_argument("--cache", action="store_true", help="enable the semantic answer cache")
+    common.add_argument("--no-abstain", action="store_true", help="disable confidence-gated abstention")
+    common.add_argument("--no-sanitize", action="store_true", help="disable prompt-injection defence")
 
     p_index = sub.add_parser("index", parents=[common], help="build and save an index")
     p_index.add_argument("--corpus", required=True, help="JSONL corpus path")
